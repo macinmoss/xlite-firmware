@@ -1,0 +1,10 @@
+**/.DS_Store
+*.mp4
+peach_light/build/
+peach_light/.cache/
+
+# Xcode user-specific files
+**/*.xcuserstate
+**/xcuserdata/
+**/UserInterfaceState.xcuserstate
+peach_light/dev_key.pem

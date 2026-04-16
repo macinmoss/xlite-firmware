@@ -1,0 +1,55 @@
+name: Firmware Release
+
+# Triggers when you push a tag like v1.2.3
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Nordic Connect SDK + Zephyr toolchain via the nRF Connect for VS Code docker image.
+      # This is the official Nordic CI image — includes west, the Zephyr SDK, and NCS.
+      - name: Set up nRF Connect SDK
+        uses: nrfconnect/action-nrf-connect-sdk@v1
+        with:
+          ncs-version: v2.7.0   # ← pin to the NCS version you develop against
+
+      - name: West update (fetch dependencies)
+        run: west update
+        working-directory: peach_light
+
+      - name: Build firmware
+        run: |
+          west build \
+            --board nrf52dk_nrf52832 \
+            --build-dir build \
+            -- \
+            -DCONFIG_BOOTLOADER_MCUBOOT=y
+        working-directory: peach_light
+
+      # The MCUboot-signed OTA image is at build/zephyr/app_update.bin
+      - name: Verify artifact exists
+        run: test -f peach_light/build/zephyr/app_update.bin
+
+      - name: Create GitHub Release and attach firmware
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Firmware ${{ github.ref_name }}
+          body: |
+            ### xLite Peach Firmware ${{ github.ref_name }}
+
+            **Installing this update:**
+            Open the xLite app, connect to your light, and tap the update banner.
+
+            **Manual install:**
+            Flash `app_update.bin` with `mcumgr` or nRF Connect Device Manager.
+          files: peach_light/build/zephyr/app_update.bin
+          fail_on_unmatched_files: true

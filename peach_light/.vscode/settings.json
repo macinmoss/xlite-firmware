@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "gap.h": "c",
+        "nrfx_saadc.h": "c",
+        "nrfy_saadc.h": "c"
+    }
+}
