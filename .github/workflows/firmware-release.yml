@@ -14,28 +14,58 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Nordic Connect SDK + Zephyr toolchain via the nRF Connect for VS Code docker image.
-      # This is the official Nordic CI image — includes west, the Zephyr SDK, and NCS.
-      - name: Set up nRF Connect SDK
-        uses: nrfconnect/action-nrf-connect-sdk@v1
-        with:
-          ncs-version: v2.7.0   # ← pin to the NCS version you develop against
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build gperf ccache dfu-util \
+            device-tree-compiler python3-pip python3-setuptools python3-wheel \
+            xz-utils file make gcc gcc-multilib g++-multilib
 
-      - name: West update (fetch dependencies)
-        run: west update
-        working-directory: peach_light
+      - name: Install west
+        run: pip3 install west
+
+      - name: Cache NCS workspace
+        id: cache-ncs
+        uses: actions/cache@v4
+        with:
+          path: ~/ncs
+          key: ncs-v2.7.0
+
+      - name: Initialize NCS workspace
+        if: steps.cache-ncs.outputs.cache-hit != 'true'
+        run: |
+          west init -m https://github.com/nrfconnect/sdk-nrf.git --mr v2.7.0 ~/ncs
+          cd ~/ncs
+          west update
+          west zephyr-export
+
+      - name: Install Python requirements
+        run: |
+          pip3 install -r ~/ncs/zephyr/scripts/requirements.txt
+          pip3 install -r ~/ncs/nrf/scripts/requirements.txt
+          pip3 install -r ~/ncs/bootloader/mcuboot/scripts/requirements.txt
+
+      - name: Install Zephyr SDK 0.16.5
+        run: |
+          wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.16.5/zephyr-sdk-0.16.5_linux-x86_64_minimal.tar.xz
+          tar -xf zephyr-sdk-0.16.5_linux-x86_64_minimal.tar.xz -C ~/
+          ~/zephyr-sdk-0.16.5/setup.sh -t arm-zephyr-eabi -h -c
+
+      # Signing key stored as a GitHub secret.
+      # Go to: xlite-firmware → Settings → Secrets → Actions → New secret
+      # Name: SIGNING_KEY  Value: paste the full contents of peach_light/dev_key.pem
+      - name: Write signing key
+        run: echo "${{ secrets.SIGNING_KEY }}" > peach_light/dev_key.pem
 
       - name: Build firmware
         run: |
+          cd ~/ncs
           west build \
-            --board nrf52dk_nrf52832 \
-            --build-dir build \
-            -- \
-            -DCONFIG_BOOTLOADER_MCUBOOT=y
-        working-directory: peach_light
+            --board nrf52dk/nrf52832 \
+            --build-dir $GITHUB_WORKSPACE/peach_light/build \
+            $GITHUB_WORKSPACE/peach_light
 
-      # The MCUboot-signed OTA image is at build/zephyr/app_update.bin
-      - name: Verify artifact exists
+      - name: Verify artifact
         run: test -f peach_light/build/zephyr/app_update.bin
 
       - name: Create GitHub Release and attach firmware
@@ -50,6 +80,6 @@ jobs:
             Open the xLite app, connect to your light, and tap the update banner.
 
             **Manual install:**
-            Flash `app_update.bin` with `mcumgr` or nRF Connect Device Manager.
+            Flash `app_update.bin` with nRF Connect Device Manager.
           files: peach_light/build/zephyr/app_update.bin
           fail_on_unmatched_files: true
