@@ -57,6 +57,13 @@ jobs:
       - name: Write signing key
         run: echo "${{ secrets.SIGNING_KEY }}" > peach_light/dev_key.pem
 
+      # Replace the local absolute key path with the CI path in both config files
+      - name: Patch key paths for CI
+        run: |
+          KEY="$GITHUB_WORKSPACE/peach_light/dev_key.pem"
+          sed -i "s|CONFIG_MCUBOOT_SIGNATURE_KEY_FILE=.*|CONFIG_MCUBOOT_SIGNATURE_KEY_FILE=\"$KEY\"|" peach_light/prj.conf
+          sed -i "s|CONFIG_BOOT_SIGNATURE_KEY_FILE=.*|CONFIG_BOOT_SIGNATURE_KEY_FILE=\"$KEY\"|" peach_light/child_image/mcuboot.conf
+
       - name: Build firmware
         run: |
           cd ~/ncs
